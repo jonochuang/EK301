@@ -1,0 +1,146 @@
+% Get the size of matrix C, the joint/member interaction matrix
+[i, j] = size(C);
+
+% Initialize a matrix of zeros to change binary values in C to the value of
+% the joint that they represent
+B = zeros(i, j);
+for row = 1:i
+    for col = 1:j
+        if C(row, col) == 1
+            B(row, col) = row;
+        else
+            B(row, col) = 0;
+        end
+    end
+end
+
+% Creates a matrix of the sum of each column in matrix B
+D = sum(B);
+
+% Initializes matrix of zeros to store unit vectors in X-direction
+Ax = zeros(i, j);
+
+% Increments through matrix C to calculate X unit vectors
+for row = 1:i
+    for col = 1:j
+        if C(row, col) == 1
+            final = D(col) - B(row, col);
+            Ax(row, col) = (X(final) - X(row)) / ...
+                sqrt((X(final) - X(row))^2 + (Y(final) - Y(row))^2);
+        else
+            Ax(row, col) = 0;
+        end
+    end
+end
+
+% Initializes matrix for Y-direction unit vectors and member lengths
+Ay = zeros(i, j);
+memLen = zeros(i, j);
+disp(memLen)
+
+% Repeat steps for Y direction
+for row = 1:i
+    for col = 1:j
+        if C(row, col) == 1
+            final = D(col) - B(row, col);
+            Ay(row, col) = (Y(final) - Y(row)) / ...
+                sqrt((X(final) - X(row))^2 + (Y(final) - Y(row))^2);
+            memLen(row, col) = sqrt((X(final) - X(row))^2 + (Y(final) - Y(row))^2);
+        else
+            Ay(row, col) = 0;
+        end
+    end
+end
+
+% Concatenate Ax with Sx and Ay with Sy
+Axc = horzcat(Ax, Sx);
+Ayc = horzcat(Ay, Sy);
+
+% Vertically concatenate unit vector matrices
+A = vertcat(Axc, Ayc);
+disp(A)
+
+% Solve for tensions
+T = A \ L;
+disp(T)
+
+% Calculate total member lengths
+lenTot = sum(memLen, "all") / 2;
+
+% Calculate Rm values
+Rm1 = T(1:end-3) / sum(L);
+fprintf("Rm\n")
+Rm2 = Rm1';
+
+% Get member lengths as a 1xM vector
+memLenMat = sum(memLen, 1) / 2;
+
+% Calculate PCritical using formula from Buckling Lab
+fprintf("PCrit\n")
+PCrit = 1703 * memLenMat .^ -1.633;
+
+% Calculate failure load for each member
+fprintf("Wfail\n")
+Wfail = -PCrit ./ Rm2;
+
+% Determine critical member and failure value
+[k, l] = size(Wfail);
+MCritVal = 1000;
+MCrit = 0;
+for wFaily = 1:l
+    if Wfail(1, wFaily) < MCritVal && Wfail(1, wFaily) > 0
+        MCritVal = Wfail(1, wFaily);
+        MCrit = wFaily;
+    end
+end
+
+fprintf("Wfail\n")
+disp(Wfail)
+
+% Print out values
+forcesX = sum(Sx, "all");
+forcesY = sum(Sy, "all");
+totalForces = forcesX + forcesY;
+[b, c] = size(C);
+load_tot = sum(L, "all");
+currentDate = datetime('now');
+dateString = datestr(currentDate, 'mm/dd/yyyy');
+
+fprintf('EK301, Section A1, Group: (in alphabetical order) Jonathan C., Alex L., Noam R., %s\n', dateString)
+fprintf('Load: %.4f oz. \n', load_tot)
+fprintf('Member forces in oz. \n')
+
+for tension = 1:c
+    if T(tension) < 0
+        cndit = '(C)';
+    elseif T(tension) == 0
+        cndit = '(0)';
+    else
+        cndit = '(T)';
+    end
+
+    if abs(T(tension)) < 0.0005
+        fprintf('m%d: 0 (0) \n', tension)
+    else
+        fprintf('m%d: %.4g %s\n', tension, abs(T(tension)), cndit)
+    end
+end
+
+fprintf('Reaction forces in oz.: \n')
+for reactionx = 1:forcesX
+    if abs(T(j + reactionx)) < 0.0005
+        fprintf('Sx%d: 0 \n', reactionx)
+    else
+        fprintf('Sx%d: %.4g\n', reactionx, T(j + reactionx))
+    end
+end
+
+for reactiony = 1:forcesY
+    fprintf('Sy%d: %.4g\n', reactiony, T(j + forcesX + reactiony))
+end
+
+% Calculate cost and final report
+cost = i * 10 + lenTot;
+fprintf('Cost of truss: $%.2f \n', cost)
+fprintf('The critical member is # %d and it will fail under a load of %.4g oz.\n', MCrit, abs(MCritVal))
+fprintf('Theoretical max load/cost ratio in oz/$: %.2g \n', abs(MCritVal) / cost)
